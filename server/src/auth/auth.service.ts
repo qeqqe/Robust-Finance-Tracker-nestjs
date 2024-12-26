@@ -36,7 +36,6 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    // Find the user
     const user = await prisma.user.findUnique({
       where: { email: dto.email },
       select: {
@@ -51,14 +50,12 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Verify password
     const isPasswordValid = await argon2.verify(user.password, dto.password);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Generate token
     const token = await this.jwtService.signAsync(
       {
         sub: user.id,

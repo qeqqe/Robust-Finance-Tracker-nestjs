@@ -44,7 +44,6 @@ export default function LoginPage() {
 
       const data = await response.json();
 
-      // Log the entire response for debugging
       console.log("Full response:", {
         status: response.status,
         data: data,
@@ -58,11 +57,9 @@ export default function LoginPage() {
         throw new Error("No access token received");
       }
 
-      // Store auth data
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
-      // Redirect
       router.push("/dashboard");
     } catch (error) {
       console.error("Login failed:", error);
