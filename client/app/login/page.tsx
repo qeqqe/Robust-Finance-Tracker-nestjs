@@ -1,9 +1,75 @@
-import React from "react";
+"use client";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+interface FormDataInterface {
+  email: string;
+  password: string;
+}
+
+interface LoginResponse {
+  access_token: string;
+  user: {
+    email: string;
+    firstName: string;
+  };
+}
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export default function LoginPage() {
+  const [formData, setFormData] = useState<FormDataInterface>({
+    email: "",
+    password: "",
+  });
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
+        }),
+      });
+
+      const data = await response.json();
+
+      // Log the entire response for debugging
+      console.log("Full response:", {
+        status: response.status,
+        data: data,
+      });
+
+      if (!response.ok) {
+        throw new Error(data.message || "Login failed");
+      }
+
+      if (!data.access_token) {
+        throw new Error("No access token received");
+      }
+
+      // Store auth data
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Redirect
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Login failed:", error);
+      alert(error instanceof Error ? error.message : "Failed to login");
+    }
+  };
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-black relative overflow-hidden">
       {/* bg effect */}
@@ -24,12 +90,19 @@ export default function LoginPage() {
             <p className="text-slate-400 mt-2">Sign in to your account</p>
           </div>
 
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
               <Input
                 type="email"
                 placeholder="Email"
                 className="bg-white/[0.05] border-white/[0.1] text-white h-12"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    email: e.target.value,
+                  }))
+                }
               />
             </div>
             <div>
@@ -37,9 +110,19 @@ export default function LoginPage() {
                 type="password"
                 placeholder="Password"
                 className="bg-white/[0.05] border-white/[0.1] text-white h-12"
+                value={formData.password}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    password: e.target.value,
+                  }))
+                }
               />
             </div>
-            <Button className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white h-12 rounded-xl transition-all duration-200">
+            <Button
+              type="submit"
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white h-12 rounded-xl transition-all duration-200"
+            >
               Sign In
             </Button>
           </form>

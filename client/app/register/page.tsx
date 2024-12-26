@@ -1,10 +1,10 @@
 "use client";
-import React, { useState } from "react";
+import React, { use, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import * as zod from "zod";
-
+import { useRouter } from "next/navigation";
 interface UserFormData {
   firstName: string;
   lastName: string;
@@ -23,7 +23,7 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
   });
-
+  const router = useRouter();
   const handleSubmit = async () => {
     if (formData.password !== formData.confirmPassword) {
       alert("Passwords do not match");
@@ -64,8 +64,8 @@ export default function RegisterPage() {
         throw new Error(data.message || "Registration failed");
       }
 
-      localStorage.setItem("user", data.email);
       alert("Account created successfully");
+      router.push("/login");
     } catch (error) {
       console.error("Registration error:", error);
       alert(error || "Failed to create account");
