@@ -34,7 +34,7 @@ import {
   Globe,
   Currency,
 } from "lucide-react";
-import Overview from "../(components)/overview";
+import Overview from "../(components)/Overview";
 import Transaction from "../(components)/Transaction";
 import Budget from "../(components)/Budget";
 import Ai from "../(components)/Ai";

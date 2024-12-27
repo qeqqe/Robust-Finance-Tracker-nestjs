@@ -4,6 +4,7 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
+import { BankModule } from './bank/bank.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -23,6 +24,7 @@ import * as Joi from 'joi';
       signOptions: { expiresIn: '1d' },
     }),
     AuthModule,
+    BankModule,
   ],
   controllers: [AppController],
   providers: [AppService],

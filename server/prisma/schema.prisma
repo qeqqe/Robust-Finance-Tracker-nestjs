@@ -14,19 +14,238 @@ datasource db {
 }
 
 model User {
-  id          String        @id @default(cuid())
-  email       String        @unique
-  firstName   String
-  lastName    String
-  password    String
-  BankAccount BankAccount[]
+  id            String         @id @default(cuid())
+  email         String         @unique
+  firstName     String
+  lastName      String
+  password      String
+  accounts      Account[]
+  transactions  Transaction[]
+  budgets       Budget[]
+  categories    Category[]
+  investments   Investment[]
+  notifications Notification[]
+  settings      Settings?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
-model BankAccount {
-  id        String   @id @default(cuid())
+model Account {
+  id            String        @id @default(cuid())
+  userId        String
+  name          String
+  type          AccountType
+  currency      String        @default("USD")
+  balance       Float         @default(0)
+  isDefault     Boolean       @default(false)
+  transactions  Transaction[]
+  transfersFrom Transfer[]    @relation("FromAccount")
+  transfersTo   Transfer[]    @relation("ToAccount")
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([userId, name])
+}
+
+model Transaction {
+  id            String            @id @default(cuid())
+  userId        String
+  accountId     String
+  categoryId    String?
+  amount        Float
+  type          TransactionType
+  status        TransactionStatus @default(COMPLETED)
+  date          DateTime
+  description   String
+  notes         String?
+  receipt       Receipt?
+  isRecurring   Boolean           @default(false)
+  recurringRule RecurringRule?
+  category      Category?         @relation(fields: [categoryId], references: [id])
+  account       Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([userId, date])
+  @@index([accountId, date])
+}
+
+model Category {
+  id           String          @id @default(cuid())
+  userId       String
+  name         String
+  type         TransactionType
+  color        String?
+  icon         String?
+  transactions Transaction[]
+  budgets      Budget[]
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([userId, name])
+}
+
+model Budget {
+  id             String     @id @default(cuid())
+  userId         String
+  categoryId     String
+  amount         Float
+  period         PeriodType @default(MONTHLY)
+  startDate      DateTime
+  endDate        DateTime?
+  alerts         Boolean    @default(true)
+  alertThreshold Float      @default(80) // percentage
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category       Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([userId, startDate])
+}
+
+model Investment {
+  id          String         @id @default(cuid())
+  userId      String
+  type        InvestmentType
+  symbol      String?
+  name        String
+  amount      Float
+  shares      Float?
+  price       Float?
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  performance Performance[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model Performance {
+  id           String     @id @default(cuid())
+  investmentId String
+  date         DateTime
+  value        Float
+  change       Float
+  investment   Investment @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@index([investmentId, date])
+}
+
+model Transfer {
+  id            String   @id @default(cuid())
+  fromAccountId String
+  toAccountId   String
+  amount        Float
+  description   String?
+  date          DateTime
+  fromAccount   Account  @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccount     Account  @relation("ToAccount", fields: [toAccountId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Receipt {
+  id            String      @id @default(cuid())
+  transactionId String      @unique
+  url           String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model RecurringRule {
+  id            String      @id @default(cuid())
+  transactionId String      @unique
+  frequency     Frequency
+  interval      Int         @default(1)
+  startDate     DateTime
+  endDate       DateTime?
+  lastProcessed DateTime?
+  nextDue       DateTime
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Settings {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  defaultCurrency String   @default("USD")
+  theme           String   @default("dark")
+  language        String   @default("en")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Notification {
+  id        String           @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  balance   Float
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId, read])
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CREDIT
+  INVESTMENT
+  CASH
+  CRYPTO
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PeriodType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum NotificationType {
+  BUDGET_ALERT
+  LOW_BALANCE
+  BILL_DUE
+  TRANSACTION
+  SYSTEM
+}
+
+enum InvestmentType {
+  STOCK
+  CRYPTO
+  MUTUAL_FUND
+  ETF
+  BOND
+  REAL_ESTATE
 }
