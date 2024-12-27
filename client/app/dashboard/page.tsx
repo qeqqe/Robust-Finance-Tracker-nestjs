@@ -42,6 +42,7 @@ import Reports from "../(components)/Reports";
 import Setting from "../(components)/Setting";
 import Investment from "../(components)/Investment";
 import CurrencyPage from "../(components)/CurrencyPage";
+import { useRouter } from "next/navigation";
 const dummyTransactions = [
   {
     id: 1,
@@ -87,6 +88,10 @@ const dummyChartData = [
 export default function DashboardPage() {
   const [activeSection, setActiveSection] = useState("overview");
   const [isExpanded, setIsExpanded] = useState(false);
+  const router = useRouter();
+  if (!localStorage.getItem("access_token")) {
+    router.push("/login");
+  }
 
   const renderSectionContent = () => {
     switch (activeSection) {
