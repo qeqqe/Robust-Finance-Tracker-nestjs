@@ -86,7 +86,10 @@ const dummyChartData = [
 ];
 
 export default function DashboardPage() {
-  const [activeSection, setActiveSection] = useState("overview");
+  if (!localStorage.getItem("activeSection")) {
+    localStorage.setItem("activeSection", "overview");
+  }
+  const activeSection = localStorage.getItem("activeSection") || "overview";
   const [isExpanded, setIsExpanded] = useState(false);
   const router = useRouter();
   if (!localStorage.getItem("access_token")) {
@@ -181,7 +184,7 @@ export default function DashboardPage() {
                     ? "text-white bg-white/10"
                     : "text-white/70 hover:text-white hover:bg-white/10"
                 }`}
-                onClick={() => setActiveSection(item.id)}
+                onClick={() => localStorage.setItem("activeSection", item.id)}
               >
                 <item.icon className="h-6 w-6" />
                 <span className="transition-opacity duration-200">
