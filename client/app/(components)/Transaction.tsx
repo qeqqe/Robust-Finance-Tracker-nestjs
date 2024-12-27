@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -12,31 +12,92 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { PlusCircle, Upload, Search, Receipt, ArrowUpDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+interface TransactionInterface {
+  id: string;
+  userId: string;
+  accountId: string;
+  categoryId: string | null;
+  amount: number;
+  type: "INCOME" | "EXPENSE" | "TRANSFER";
+  status: "PENDING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  date: string;
+  description: string;
+  notes: string | null;
+  receipt: {
+    id: string;
+    url: string;
+  } | null;
+  isRecurring: boolean;
+  recurringRule: {
+    frequency: string;
+    interval: number;
+    nextDue: string;
+  } | null;
+  category: {
+    id: string;
+    name: string;
+    color: string | null;
+    icon: string | null;
+  } | null;
+  account: {
+    id: string;
+    name: string;
+    type: string;
+  };
+  createdAt: string;
+}
 
 const Transaction = () => {
-  const dummyTransactions = [
-    {
-      id: 1,
-      date: "2024-02-20",
-      description: "Grocery Store",
-      amount: -85.5,
-      category: "Food",
-    },
-    {
-      id: 2,
-      date: "2024-02-19",
-      description: "Salary Deposit",
-      amount: 3000.0,
-      category: "Income",
-    },
-    {
-      id: 3,
-      date: "2024-02-18",
-      description: "Electric Bill",
-      amount: -120.0,
-      category: "Utilities",
-    },
-  ];
+  const [transactions, setTransactions] = useState<TransactionInterface[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+          router.push("/login");
+          return;
+        }
+
+        const response = await fetch(`${BACKEND_URL}/bank/transactions`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            router.push("/login");
+            return;
+          }
+          throw new Error("Failed to fetch transactions");
+        }
+
+        const data = await response.json();
+        setTransactions(data);
+      } catch (error) {
+        console.error("Error fetching transactions:", error);
+        setError(
+          error instanceof Error ? error.message : "Failed to load transactions"
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, [router]);
+
+  if (isLoading)
+    return <div className="text-white">Loading transactions...</div>;
+  if (error) return <div className="text-red-400">Error: {error}</div>;
 
   return (
     <div className="space-y-6">
@@ -118,14 +179,14 @@ const Transaction = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dummyTransactions.map((tx) => (
+                  {transactions.map((tx) => (
                     <TableRow key={tx.id} className="border-white/10">
                       <TableCell className="text-white/70">{tx.date}</TableCell>
                       <TableCell className="text-white/70">
                         {tx.description}
                       </TableCell>
                       <TableCell className="text-white/70">
-                        {tx.category}
+                        {tx.category?.name}
                       </TableCell>
                       <TableCell
                         className={`text-right ${

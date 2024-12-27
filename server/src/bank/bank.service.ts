@@ -1,5 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import {
+  CreateTransactionDto,
+  UpdateTransactionDto,
+} from './dto/transaction.dto';
 
 const prisma = new PrismaClient();
 
@@ -57,5 +65,103 @@ export class BankService {
       },
       totalNetWorth: totalBalance + totalInvestmentValue,
     };
+  }
+
+  async getTransactions(userId: string) {
+    return prisma.transaction.findMany({
+      where: { userId },
+      include: {
+        category: true,
+        account: true,
+        receipt: true,
+        recurringRule: true,
+      },
+      orderBy: {
+        date: 'desc',
+      },
+    });
+  }
+
+  async createTransaction(userId: string, dto: CreateTransactionDto) {
+    // verify account ownership
+    const account = await prisma.account.findFirst({
+      where: { id: dto.accountId, userId },
+    });
+
+    if (!account) {
+      throw new ForbiddenException('Account not found or access denied');
+    }
+
+    const transaction = await prisma.transaction.create({
+      data: {
+        ...dto,
+        userId,
+      },
+      include: {
+        category: true,
+        account: true,
+      },
+    });
+
+    // update account balance
+    await prisma.account.update({
+      where: { id: dto.accountId },
+      data: {
+        balance: {
+          increment: dto.type === 'EXPENSE' ? -dto.amount : dto.amount,
+        },
+      },
+    });
+
+    return transaction;
+  }
+
+  async updateTransaction(
+    userId: string,
+    id: string,
+    dto: UpdateTransactionDto,
+  ) {
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, userId },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    return prisma.transaction.update({
+      where: { id },
+      data: dto,
+      include: {
+        category: true,
+        account: true,
+      },
+    });
+  }
+
+  async deleteTransaction(userId: string, id: string) {
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, userId },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    await prisma.account.update({
+      where: { id: transaction.accountId },
+      data: {
+        balance: {
+          decrement:
+            transaction.type === 'EXPENSE'
+              ? -transaction.amount
+              : transaction.amount,
+        },
+      },
+    });
+
+    return prisma.transaction.delete({
+      where: { id },
+    });
   }
 }
