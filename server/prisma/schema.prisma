@@ -14,9 +14,19 @@ datasource db {
 }
 
 model User {
-  id        String @id @default(cuid())
-  email     String @unique
-  firstName String
-  lastName  String
-  password  String
+  id          String        @id @default(cuid())
+  email       String        @unique
+  firstName   String
+  lastName    String
+  password    String
+  BankAccount BankAccount[]
+}
+
+model BankAccount {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  balance   Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

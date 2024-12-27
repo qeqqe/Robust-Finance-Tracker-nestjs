@@ -11,24 +11,37 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  PieChart as RePieChart,
+  Pie,
 } from "recharts";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
-import {
-  PlusCircle,
-  Wallet,
-  PieChart,
+  Layout,
   ArrowUpDown,
+  PieChart,
   Settings,
+  LineChart,
+  Wallet,
+  Receipt,
+  Calendar,
+  Brain,
+  TrendingUp,
+  DollarSign,
+  FileSpreadsheet,
+  Upload,
+  Search,
+  CreditCard,
+  RefreshCcw,
+  Globe,
+  Currency,
 } from "lucide-react";
-
+import Overview from "../(components)/overview";
+import Transaction from "../(components)/Transaction";
+import Budget from "../(components)/Budget";
+import Ai from "../(components)/Ai";
+import Reports from "../(components)/Reports";
+import Setting from "../(components)/Setting";
+import Investment from "../(components)/Investment";
+import CurrencyPage from "../(components)/CurrencyPage";
 const dummyTransactions = [
   {
     id: 1,
@@ -72,130 +85,125 @@ const dummyChartData = [
 ];
 
 export default function DashboardPage() {
+  const [activeSection, setActiveSection] = useState("overview");
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const renderSectionContent = () => {
+    switch (activeSection) {
+      case "overview":
+        return <Overview />;
+
+      case "transactions":
+        return <Transaction />;
+
+      case "budgets":
+        return <Budget />;
+
+      case "investments":
+        return <Investment />;
+      case "ai":
+        return <Ai />;
+      case "currency":
+        return <CurrencyPage />;
+      case "reports":
+        return <Reports />;
+      case "settings":
+        return <Setting />;
+    }
+  };
+
   return (
-    <main className="min-h-screen bg-black">
-      {/* Background Effects */}
+    <div className="min-h-screen bg-black">
+      {/* bg effect */}
       <div className="fixed inset-0">
+        <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:50px_50px]" />
         <div className="absolute inset-0 bg-gradient-to-tr from-slate-900 via-purple-900/20 to-slate-900" />
         <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-purple-500/30 rounded-full mix-blend-color-dodge filter blur-[120px] animate-blob"></div>
         <div className="absolute top-[20%] right-[-10%] w-[800px] h-[800px] bg-blue-500/30 rounded-full mix-blend-color-dodge filter blur-[120px] animate-blob animation-delay-2000"></div>
         <div className="absolute bottom-[-20%] left-[20%] w-[800px] h-[800px] bg-indigo-500/30 rounded-full mix-blend-color-dodge filter blur-[120px] animate-blob animation-delay-4000"></div>
       </div>
 
-      {/* Content */}
-      <div className="relative z-10 container mx-auto px-4 py-8">
-        {/* Header with Account Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {dummyAccounts.map((account) => (
-            <Card
-              key={account.name}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/15 transition-all"
-            >
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Wallet className="h-5 w-5" />
-                  {account.name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <span
-                  className={`text-2xl font-bold ${
-                    account.balance < 0 ? "text-red-400" : "text-green-400"
-                  }`}
-                >
-                  ${Math.abs(account.balance).toFixed(2)}
+      {/* logo */}
+      <div
+        className={`fixed top-4 left-4 z-50 flex items-center gap-3 transition-all duration-300 ${
+          isExpanded ? "scale-150 translate-x-6" : ""
+        }`}
+      >
+        <div className="h-8 w-8 rounded-lg ml-[1rem] bg-gradient-to-tr from-indigo-500 to-purple-500 rotate-12 transform hover:rotate-0 transition-all duration-300" />
+        <h1
+          className={`text-xl font-bold  bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-500 transition-all duration-300 ${
+            isExpanded ? "opacity-100" : "opacity-100"
+          }`}
+        >
+          Apex
+        </h1>
+      </div>
+
+      {/* sidebar trigger */}
+      <div
+        className="fixed left-0 top-20 w-3 h-[calc(100%-5rem)] z-50"
+        onMouseEnter={() => setIsExpanded(true)}
+      />
+
+      {/* sidebar */}
+      <div
+        className={`fixed left-0 top-0 h-full bg-black/40 border-r border-white/10 backdrop-blur-xl transition-all duration-300 ease-in-out ${
+          isExpanded ? "w-80 opacity-100" : "w-0 opacity-0"
+        }`}
+        onMouseLeave={() => setIsExpanded(false)}
+      >
+        <div
+          className={`p-8 pt-20 w-80 ${
+            isExpanded ? "opacity-100" : "opacity-0"
+          } transition-opacity duration-300`}
+        >
+          <nav className="space-y-2">
+            {[
+              { icon: Layout, label: "Overview", id: "overview" },
+              { icon: ArrowUpDown, label: "Transactions", id: "transactions" },
+              { icon: PieChart, label: "Budgets", id: "budgets" },
+              { icon: TrendingUp, label: "Investments", id: "investments" },
+              { icon: Brain, label: "AI Insights", id: "ai" },
+              { icon: Globe, label: "Multi-Currency", id: "currency" },
+              { icon: FileSpreadsheet, label: "Reports", id: "reports" },
+              { icon: Settings, label: "Settings", id: "settings" },
+            ].map((item) => (
+              <Button
+                key={item.id}
+                variant="ghost"
+                className={`w-full justify-start gap-4 py-6 px-4 text-lg ${
+                  activeSection === item.id
+                    ? "text-white bg-white/10"
+                    : "text-white/70 hover:text-white hover:bg-white/10"
+                }`}
+                onClick={() => setActiveSection(item.id)}
+              >
+                <item.icon className="h-6 w-6" />
+                <span className="transition-opacity duration-200">
+                  {item.label}
                 </span>
-              </CardContent>
-            </Card>
-          ))}
+              </Button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* content */}
+      <div
+        className={`transition-all duration-300 ${
+          isExpanded ? "ml-80" : "ml-0"
+        } p-8 pt-20 relative`}
+      >
+        {/* title */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-white">
+            {activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
+          </h1>
         </div>
 
-        {/* Main Dashboard Tabs */}
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="bg-white/10 border-white/20 text-white grid grid-cols-5 lg:w-[600px] mx-auto">
-            <TabsTrigger
-              value="overview"
-              className="data-[state=active]:bg-white/20"
-            >
-              Overview
-            </TabsTrigger>
-            <TabsTrigger
-              value="transactions"
-              className="data-[state=active]:bg-white/20"
-            >
-              Transactions
-            </TabsTrigger>
-            <TabsTrigger
-              value="budgets"
-              className="data-[state=active]:bg-white/20"
-            >
-              Budgets
-            </TabsTrigger>
-            <TabsTrigger
-              value="analytics"
-              className="data-[state=active]:bg-white/20"
-            >
-              Analytics
-            </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              className="data-[state=active]:bg-white/20"
-            >
-              Settings
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-white/10 border-white/20">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <PieChart className="h-5 w-5" />
-                    Monthly Overview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dummyChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                      <XAxis dataKey="name" stroke="#fff" />
-                      <YAxis stroke="#fff" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#1f2937",
-                          border: "1px solid rgba(255,255,255,0.2)",
-                        }}
-                      />
-                      <Bar dataKey="income" fill="#4ade80" />
-                      <Bar dataKey="expenses" fill="#f87171" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/10 border-white/20">
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <ArrowUpDown className="h-5 w-5" />
-                    Recent Activity
-                  </CardTitle>
-                  <Button
-                    variant="outline"
-                    className="border-white/20 text-white"
-                  >
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Add
-                  </Button>
-                </CardHeader>
-                <CardContent>{/* Recent transactions table */}</CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Other tab contents... */}
-        </Tabs>
+        {/* dynamic content */}
+        {renderSectionContent()}
       </div>
-    </main>
+    </div>
   );
 }
