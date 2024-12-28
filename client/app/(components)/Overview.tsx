@@ -124,11 +124,13 @@ const Overview = () => {
                   >
                     <span className="text-white/70">{tx.description}</span>
                     <span
-                      className={
-                        tx.amount < 0 ? "text-red-400" : "text-green-400"
-                      }
+                      className={`font-medium ${
+                        tx.type === "EXPENSE"
+                          ? "text-red-400"
+                          : "text-green-400"
+                      }`}
                     >
-                      $
+                      {tx.type === "EXPENSE" ? "-" : "+"}$
                       {Math.abs(tx.amount).toLocaleString("en-US", {
                         minimumFractionDigits: 2,
                       })}

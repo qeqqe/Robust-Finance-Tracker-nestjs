@@ -59,9 +59,29 @@ interface TransactionInterface {
   createdAt: string;
 }
 
+interface NormalTransactionInterface {
+  description: string;
+  amount: number;
+  date: string;
+  type: "INCOME" | "EXPENSE";
+  notes: string;
+  accountId: string;
+  status: "COMPLETED";
+}
+
 const Transaction = () => {
   const [transactions, setTransactions] = useState<TransactionInterface[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [transactionData, setTransactionData] =
+    useState<NormalTransactionInterface>({
+      description: "",
+      amount: 0,
+      date: "",
+      type: "EXPENSE",
+      notes: "",
+      accountId: "",
+      status: "COMPLETED",
+    });
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -72,7 +92,19 @@ const Transaction = () => {
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>(
     []
   );
+
+  const [normalTransactionDialog, setNormalTransactionDialog] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [newTransaction, setNewTransaction] =
+    useState<NormalTransactionInterface>({
+      description: "",
+      amount: 0,
+      date: new Date().toISOString().split("T")[0], // Today's date as default
+      type: "EXPENSE",
+      notes: "",
+      accountId: "",
+      status: "COMPLETED",
+    });
 
   const handleFile = (file: File) => {
     console.log("Handling file:", file);
@@ -191,10 +223,9 @@ const Transaction = () => {
     }
   };
 
-  // Call fetchAccounts when modal opens
   const handleImportClick = () => {
     setIsModalOpen(true);
-    fetchAccounts(); // Fetch accounts when modal opens
+    fetchAccounts();
   };
 
   useEffect(() => {
@@ -223,7 +254,6 @@ const Transaction = () => {
         throw new Error("No valid data found in CSV");
       }
 
-      // Format transactions according to schema
       const formattedTransactions = (results as any[]).map((row) => ({
         description: row.description || row.Description || row.DESC || "",
         amount: Math.abs(
@@ -235,7 +265,7 @@ const Transaction = () => {
             ? "EXPENSE"
             : "INCOME",
         status: "COMPLETED",
-        accountId: selectedAccountId, // Add this
+        accountId: selectedAccountId,
         notes: row.notes || row.Notes || row.NOTES || "",
       }));
 
@@ -274,24 +304,69 @@ const Transaction = () => {
     }
   };
 
-  const handleCSVExport = async () => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      router.push("/login");
+  const handleNormalTransaction = async () => {
+    if (
+      !newTransaction.accountId ||
+      !newTransaction.description ||
+      !newTransaction.amount
+    ) {
+      alert("Please fill in all required fields");
+      return;
     }
-    const response = await fetch(`${BACKEND_URL}/bank/csvimport`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ file: file }),
+
+    try {
+      // Format the transaction data
+      const transactionData = {
+        ...newTransaction,
+        date: new Date(newTransaction.date).toISOString(), // Convert date to ISO string
+        amount: Math.abs(newTransaction.amount), // Ensure positive amount
+      };
+
+      console.log("Sending transaction:", transactionData); // Debug log
+
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`${BACKEND_URL}/bank/transactions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(transactionData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create transaction");
+      }
+
+      await fetchTransactions();
+      setNormalTransactionDialog(false);
+      // Reset form
+      setNewTransaction({
+        description: "",
+        amount: 0,
+        date: new Date().toISOString().split("T")[0],
+        type: "EXPENSE",
+        notes: "",
+        accountId: "",
+        status: "COMPLETED",
+      });
+      alert("Transaction created successfully");
+    } catch (error) {
+      console.error("Error creating transaction:", error);
+      alert(
+        error instanceof Error ? error.message : "Failed to create transaction"
+      );
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
-    if (!response.ok) {
-      alert("Failed to import CSV");
-    } else {
-      fetchTransactions();
-      alert("CSV imported successfully");
-    }
   };
 
   if (isLoading)
@@ -352,7 +427,10 @@ const Transaction = () => {
                     <Receipt className="h-4 w-4" />
                     Add Receipt
                   </Button>
-                  <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white gap-2">
+                  <Button
+                    className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white gap-2"
+                    onClick={() => setNormalTransactionDialog(true)}
+                  >
                     <PlusCircle className="h-4 w-4" />
                     New Transaction
                   </Button>
@@ -381,7 +459,9 @@ const Transaction = () => {
                 <TableBody>
                   {transactions.map((tx) => (
                     <TableRow key={tx.id} className="border-white/10">
-                      <TableCell className="text-white/70">{tx.date}</TableCell>
+                      <TableCell className="text-white/70">
+                        {formatDate(tx.date)}
+                      </TableCell>
                       <TableCell className="text-white/70">
                         {tx.description}
                       </TableCell>
@@ -389,11 +469,14 @@ const Transaction = () => {
                         {tx.category?.name}
                       </TableCell>
                       <TableCell
-                        className={`text-right ${
-                          tx.amount < 0 ? "text-red-400" : "text-green-400"
+                        className={`text-right font-medium ${
+                          tx.type === "EXPENSE"
+                            ? "text-red-400"
+                            : "text-green-400"
                         }`}
                       >
-                        ${Math.abs(tx.amount).toFixed(2)}
+                        {tx.type === "EXPENSE" ? "-" : "+"}$
+                        {Math.abs(tx.amount).toFixed(2)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -543,6 +626,107 @@ const Transaction = () => {
                   </Button>
                 </div>
               )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for normal transaction */}
+      <Dialog
+        open={normalTransactionDialog}
+        onOpenChange={setNormalTransactionDialog}
+      >
+        <DialogContent className="bg-slate-900 border border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white">New Transaction</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[80vh]">
+            <div className="space-y-4">
+              <Input
+                placeholder="Description"
+                className="bg-white/5 border-white/10 text-white"
+                value={newTransaction.description}
+                onChange={(e) =>
+                  setNewTransaction({
+                    ...newTransaction,
+                    description: e.target.value,
+                  })
+                }
+              />
+              <Input
+                type="number"
+                required
+                step="0.01"
+                min="0"
+                placeholder="Amount"
+                className="bg-white/5 border-white/10 text-white"
+                value={newTransaction.amount || ""}
+                onChange={(e) =>
+                  setNewTransaction({
+                    ...newTransaction,
+                    amount: parseFloat(e.target.value) || 0,
+                  })
+                }
+              />
+              <Input
+                type="date"
+                required
+                className="bg-white/5 border-white/10 text-white"
+                value={newTransaction.date}
+                onChange={(e) =>
+                  setNewTransaction({
+                    ...newTransaction,
+                    date: e.target.value,
+                  })
+                }
+              />
+              <select
+                value={newTransaction.type}
+                onChange={(e) =>
+                  setNewTransaction({
+                    ...newTransaction,
+                    type: e.target.value as "INCOME" | "EXPENSE",
+                  })
+                }
+                className="w-full p-2 bg-white/5 border-white/10 rounded text-white"
+              >
+                <option value="EXPENSE">Expense</option>
+                <option value="INCOME">Income</option>
+              </select>
+              <select
+                value={newTransaction.accountId}
+                onChange={(e) =>
+                  setNewTransaction({
+                    ...newTransaction,
+                    accountId: e.target.value,
+                  })
+                }
+                className="w-full p-2 bg-white/5 border-white/10 rounded text-white"
+              >
+                <option value="">Select Account</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+              <Input
+                placeholder="Notes (optional)"
+                className="bg-white/5 border-white/10 text-white"
+                value={newTransaction.notes}
+                onChange={(e) =>
+                  setNewTransaction({
+                    ...newTransaction,
+                    notes: e.target.value,
+                  })
+                }
+              />
+              <Button
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600"
+                onClick={handleNormalTransaction}
+              >
+                Create Transaction
+              </Button>
             </div>
           </ScrollArea>
         </DialogContent>

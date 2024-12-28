@@ -85,37 +85,49 @@ export class BankService {
   }
 
   async createTransaction(userId: string, dto: CreateTransactionDto) {
-    // verify account ownership
-    const account = await prisma.account.findFirst({
-      where: { id: dto.accountId, userId },
-    });
+    try {
+      // verify account ownership
+      const account = await prisma.account.findFirst({
+        where: { id: dto.accountId, userId },
+      });
 
-    if (!account) {
-      throw new ForbiddenException('Account not found or access denied');
+      if (!account) {
+        throw new ForbiddenException('Account not found or access denied');
+      }
+
+      // Create the transaction
+      const transaction = await prisma.$transaction(async (tx) => {
+        // Create transaction
+        const newTransaction = await tx.transaction.create({
+          data: {
+            ...dto,
+            userId,
+            date: new Date(dto.date), // Ensure date is properly parsed
+          },
+          include: {
+            category: true,
+            account: true,
+          },
+        });
+
+        // Update account balance
+        await tx.account.update({
+          where: { id: dto.accountId },
+          data: {
+            balance: {
+              increment: dto.type === 'EXPENSE' ? -dto.amount : dto.amount,
+            },
+          },
+        });
+
+        return newTransaction;
+      });
+
+      return transaction;
+    } catch (error) {
+      console.error('Transaction creation error:', error);
+      throw error;
     }
-
-    const transaction = await prisma.transaction.create({
-      data: {
-        ...dto,
-        userId,
-      },
-      include: {
-        category: true,
-        account: true,
-      },
-    });
-
-    // update account balance
-    await prisma.account.update({
-      where: { id: dto.accountId },
-      data: {
-        balance: {
-          increment: dto.type === 'EXPENSE' ? -dto.amount : dto.amount,
-        },
-      },
-    });
-
-    return transaction;
   }
 
   async updateTransaction(
