@@ -1,38 +1,16 @@
 "use client";
 import React, { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart as RePieChart,
-  Pie,
-} from "recharts";
 import {
   Layout,
   ArrowUpDown,
   PieChart,
   Settings,
-  LineChart,
   Wallet,
-  Receipt,
-  Calendar,
   Brain,
   TrendingUp,
-  DollarSign,
   FileSpreadsheet,
-  Upload,
-  Search,
-  CreditCard,
-  RefreshCcw,
   Globe,
-  Currency,
 } from "lucide-react";
 import Overview from "../(components)/Overview";
 import Transaction from "../(components)/Transaction";
@@ -42,48 +20,8 @@ import Reports from "../(components)/Reports";
 import Setting from "../(components)/Setting";
 import Investment from "../(components)/Investment";
 import CurrencyPage from "../(components)/CurrencyPage";
+import Account from "../(components)/Account";
 import { useRouter } from "next/navigation";
-const dummyTransactions = [
-  {
-    id: 1,
-    date: "2024-02-20",
-    description: "Grocery Store",
-    amount: -85.5,
-    category: "Food",
-  },
-  {
-    id: 2,
-    date: "2024-02-19",
-    description: "Salary Deposit",
-    amount: 3000.0,
-    category: "Income",
-  },
-  {
-    id: 3,
-    date: "2024-02-18",
-    description: "Electric Bill",
-    amount: -120.0,
-    category: "Utilities",
-  },
-];
-
-const dummyBudgets = [
-  { category: "Food", allocated: 500, spent: 350 },
-  { category: "Transportation", allocated: 300, spent: 250 },
-  { category: "Entertainment", allocated: 200, spent: 180 },
-];
-
-const dummyAccounts = [
-  { name: "Main Checking", balance: 5420.5, type: "checking" },
-  { name: "Savings", balance: 12350.75, type: "savings" },
-  { name: "Credit Card", balance: -1250.3, type: "credit" },
-];
-
-const dummyChartData = [
-  { name: "Jan", income: 4000, expenses: 3000 },
-  { name: "Feb", income: 4500, expenses: 3200 },
-  { name: "Mar", income: 4100, expenses: 3100 },
-];
 
 export default function DashboardPage() {
   if (!localStorage.getItem("activeSection")) {
@@ -117,6 +55,8 @@ export default function DashboardPage() {
         return <Reports />;
       case "settings":
         return <Setting />;
+      case "accounts":
+        return <Account />;
     }
   };
 
@@ -175,6 +115,7 @@ export default function DashboardPage() {
               { icon: Globe, label: "Multi-Currency", id: "currency" },
               { icon: FileSpreadsheet, label: "Reports", id: "reports" },
               { icon: Settings, label: "Settings", id: "settings" },
+              { icon: Wallet, label: "Accounts", id: "accounts" },
             ].map((item) => (
               <Button
                 key={item.id}

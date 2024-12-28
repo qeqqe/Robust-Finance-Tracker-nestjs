@@ -8,6 +8,8 @@ import {
   CreateTransactionDto,
   UpdateTransactionDto,
 } from './dto/transaction.dto';
+import { BulkTransactionDto } from './dto/bulk-transaction.dto';
+import { CreateAccountDto } from './dto/account.dto';
 
 const prisma = new PrismaClient();
 
@@ -162,6 +164,79 @@ export class BankService {
 
     return prisma.transaction.delete({
       where: { id },
+    });
+  }
+
+  async importTransactions(userId: string, dto: BulkTransactionDto) {
+    // verify account ownership
+    const account = await prisma.account.findFirst({
+      where: { id: dto.accountId, userId },
+    });
+
+    if (!account) {
+      throw new ForbiddenException('Account not found or access denied');
+    }
+
+    // Calculate total change to account balance
+    const totalChange = dto.transactions.reduce((sum, tx) => {
+      const amount = tx.type === 'EXPENSE' ? -tx.amount : tx.amount;
+      return sum + amount;
+    }, 0);
+
+    // create all transactions and update account balance in a transaction
+    const result = await prisma.$transaction(async (prisma) => {
+      // create all transactions
+      const createdTransactions = await Promise.all(
+        dto.transactions.map((tx) =>
+          prisma.transaction.create({
+            data: {
+              ...tx,
+              userId,
+              accountId: dto.accountId,
+            },
+            include: {
+              category: true,
+              account: true,
+            },
+          }),
+        ),
+      );
+
+      // update account balance
+      await prisma.account.update({
+        where: { id: dto.accountId },
+        data: {
+          balance: {
+            increment: totalChange,
+          },
+        },
+      });
+
+      return createdTransactions;
+    });
+
+    return result;
+  }
+
+  async getAccounts(userId: string) {
+    return prisma.account.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createAccount(userId: string, dto: CreateAccountDto) {
+    // if this is the first account for the user
+    const accountCount = await prisma.account.count({
+      where: { userId },
+    });
+
+    return prisma.account.create({
+      data: {
+        ...dto,
+        userId,
+        isDefault: accountCount === 0, // first account is default
+      },
     });
   }
 }

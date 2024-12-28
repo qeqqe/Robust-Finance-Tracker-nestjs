@@ -69,36 +69,42 @@ const Transaction = () => {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<any[]>([]);
   const [mappings, setMappings] = useState<{ [key: string]: string }>({});
-
-  const isCSVFile = (file: File) => {
-    // comprehensive MIME type and extension check cus yes
-    const validTypes = [
-      "text/csv",
-      "application/csv",
-      "application/vnd.ms-excel",
-      "application/vnd.comma-separated-values",
-      "", // apparently some stupid fucking browsers don't set the type
-    ];
-
-    return (
-      validTypes.includes(file.type) || file.name.toLowerCase().endsWith(".csv")
-    );
-  };
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>(
+    []
+  );
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
 
   const handleFile = (file: File) => {
-    if (!isCSVFile(file)) {
-      alert("Please upload a CSV file");
-      return;
-    }
+    console.log("Handling file:", file);
 
     setFile(file);
-    Papa.parse(file, {
-      complete: (results) => {
-        setPreview(results.data.slice(0, 15)); // Show first 15 rows as preview
-      },
-      header: true,
-      skipEmptyLines: true,
-    });
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      const csvData = event.target?.result as string;
+      console.log("First few characters of file:", csvData.substring(0, 100));
+
+      Papa.parse(csvData, {
+        complete: (results) => {
+          console.log("Parse results:", results);
+          if (results.errors.length > 0) {
+            console.error("CSV parsing errors:", results.errors);
+            alert(`CSV parsing errors: ${JSON.stringify(results.errors)}`);
+            return;
+          }
+          setPreview(results.data.slice(0, 15));
+        },
+        header: true,
+        skipEmptyLines: true,
+      });
+    };
+
+    reader.onerror = (error) => {
+      console.error("FileReader error:", error);
+      alert("Error reading file");
+    };
+
+    reader.readAsText(file);
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -153,8 +159,54 @@ const Transaction = () => {
       setIsLoading(false);
     }
   };
+
+  const fetchAccounts = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/bank/overview`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch accounts");
+
+      const data = await response.json();
+      console.log("Fetched accounts:", data.accounts.list); // Add this for debugging
+      setAccounts(data.accounts.list);
+
+      // Set default account if exists
+      if (data.accounts.list.length > 0) {
+        setSelectedAccountId(data.accounts.list[0].id);
+      } else {
+        console.log("No accounts found"); // Add this for debugging
+      }
+    } catch (error) {
+      console.error("Error fetching accounts:", error);
+    }
+  };
+
+  // Call fetchAccounts when modal opens
+  const handleImportClick = () => {
+    setIsModalOpen(true);
+    fetchAccounts(); // Fetch accounts when modal opens
+  };
+
+  useEffect(() => {
+    fetchTransactions();
+    fetchAccounts();
+  }, [router]);
+
   const processCSV = async () => {
-    if (!file) return;
+    if (!file || !selectedAccountId) {
+      alert("Please select an account and upload a CSV file");
+      return;
+    }
 
     try {
       const results = await new Promise((resolve, reject) => {
@@ -166,45 +218,81 @@ const Transaction = () => {
         });
       });
 
-      // formatting transactions according to schema
+      // Basic validation
+      if (!Array.isArray(results) || results.length === 0) {
+        throw new Error("No valid data found in CSV");
+      }
+
+      // Format transactions according to schema
       const formattedTransactions = (results as any[]).map((row) => ({
-        description: row[mappings.description] || row.description,
-        amount: parseFloat(row[mappings.amount] || row.amount),
-        date: new Date(row[mappings.date] || row.date).toISOString(),
+        description: row.description || row.Description || row.DESC || "",
+        amount: Math.abs(
+          parseFloat(row.amount || row.Amount || row.AMOUNT || "0")
+        ),
+        date: new Date(row.date || row.Date || row.DATE).toISOString(),
         type:
-          parseFloat(row[mappings.amount] || row.amount) < 0
+          parseFloat(row.amount || row.Amount || row.AMOUNT) < 0
             ? "EXPENSE"
             : "INCOME",
-        accountId: "", // uhh will do it later
-        categoryId: null, // need to map but im lazy
+        status: "COMPLETED",
+        accountId: selectedAccountId, // Add this
+        notes: row.notes || row.Notes || row.NOTES || "",
       }));
 
-      // thorow this shit to backend
-      const response = await fetch(`${BACKEND_URL}/bank/transactions/bulk`, {
+      console.log("Sending to backend:", {
+        transactions: formattedTransactions,
+        accountId: selectedAccountId,
+      });
+
+      const response = await fetch(`${BACKEND_URL}/bank/transactions/import`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("access_token")}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ transactions: formattedTransactions }),
+        body: JSON.stringify({
+          transactions: formattedTransactions,
+          accountId: selectedAccountId,
+        }),
       });
 
-      if (!response.ok) throw new Error("Failed to upload transactions");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to import transactions");
+      }
 
-      // refretch after sending the request
-      fetchTransactions();
+      await fetchTransactions();
       setIsModalOpen(false);
       setFile(null);
       setPreview([]);
+      alert("Transactions imported successfully");
     } catch (error) {
       console.error("Error processing CSV:", error);
-      alert("Failed to process CSV file");
+      alert(
+        error instanceof Error ? error.message : "Failed to process CSV file"
+      );
     }
   };
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [router]);
+  const handleCSVExport = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      router.push("/login");
+    }
+    const response = await fetch(`${BACKEND_URL}/bank/csvimport`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ file: file }),
+    });
+    if (!response.ok) {
+      alert("Failed to import CSV");
+    } else {
+      fetchTransactions();
+      alert("CSV imported successfully");
+    }
+  };
 
   if (isLoading)
     return <div className="text-white">Loading transactions...</div>;
@@ -252,7 +340,7 @@ const Transaction = () => {
                   <Button
                     variant="outline"
                     className="bg-white/5 border-white/10 text-white gap-2"
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={handleImportClick} // Change this line
                   >
                     <Upload className="h-4 w-4" />
                     Import
@@ -433,6 +521,19 @@ const Transaction = () => {
                       </div>
                     </ScrollArea>
                   </div>
+
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="w-full p-2 mb-4 bg-white/5 border border-white/10 rounded text-white"
+                  >
+                    <option value="">Select Account</option>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
 
                   <Button
                     onClick={processCSV}

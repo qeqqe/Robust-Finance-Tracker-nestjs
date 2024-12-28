@@ -16,6 +16,9 @@ import {
   CreateTransactionDto,
   UpdateTransactionDto,
 } from './dto/transaction.dto';
+import { BulkTransactionDto } from './dto/bulk-transaction.dto';
+import { CreateAccountDto } from './dto/account.dto';
+
 const prisma = new PrismaClient();
 
 @Controller('bank')
@@ -33,9 +36,35 @@ export class BankController {
     return this.bankService.getTransactions(req.user.id);
   }
 
+  @Get('accounts')
+  getAccounts(@Request() req) {
+    return this.bankService.getAccounts(req.user.id);
+  }
+
   @Post('transactions')
   createTransaction(@Request() req, @Body() dto: CreateTransactionDto) {
     return this.bankService.createTransaction(req.user.id, dto);
+  }
+
+  @Post('accounts')
+  createAccount(@Request() req, @Body() dto: CreateAccountDto) {
+    return this.bankService.createAccount(req.user.id, dto);
+  }
+
+  @Post('transactions/import')
+  async importTransactions(@Request() req, @Body() dto: BulkTransactionDto) {
+    try {
+      console.log('Received import request:', {
+        userId: req.user.id,
+        accountId: dto.accountId,
+        transactionCount: dto.transactions?.length,
+      });
+
+      return await this.bankService.importTransactions(req.user.id, dto);
+    } catch (error) {
+      console.error('Import error:', error);
+      throw error;
+    }
   }
 
   @Patch('transactions/:id')
