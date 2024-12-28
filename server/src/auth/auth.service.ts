@@ -2,17 +2,24 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient } from '@prisma/client';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
 import * as argon2 from 'argon2';
+import { BankService } from 'src/bank/bank.service';
 
 const prisma = new PrismaClient();
 
 @Injectable()
 export class AuthService {
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    @Inject(forwardRef(() => BankService))
+    private bankService: BankService,
+  ) {}
 
   async register(body: RegisterDto) {
     try {
@@ -25,6 +32,9 @@ export class AuthService {
           password: hashedPassword,
         },
       });
+
+      // Create default categories for new user
+      await this.bankService.createDefaultCategories(user.id);
 
       return this.signToken(user.id, user.email, user.firstName);
     } catch (error) {

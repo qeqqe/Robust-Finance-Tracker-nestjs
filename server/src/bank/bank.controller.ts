@@ -41,6 +41,11 @@ export class BankController {
     return this.bankService.getAccounts(req.user.id);
   }
 
+  @Get('categories')
+  getCategories(@Request() req) {
+    return this.bankService.getCategories(req.user.id);
+  }
+
   @Post('transactions')
   createTransaction(@Request() req, @Body() dto: CreateTransactionDto) {
     return this.bankService.createTransaction(req.user.id, dto);

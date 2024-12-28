@@ -21,6 +21,13 @@ import { Input } from "@/components/ui/input";
 import { PlusCircle, Upload, Search, Receipt, ArrowUpDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Papa from "papaparse";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"; // Change this import line
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -69,6 +76,16 @@ interface NormalTransactionInterface {
   status: "COMPLETED";
 }
 
+interface BudgetOption {
+  id: string;
+  categoryId: string;
+  amount: number;
+  remaining: number;
+  category: {
+    name: string;
+  };
+}
+
 const Transaction = () => {
   const [transactions, setTransactions] = useState<TransactionInterface[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,6 +122,13 @@ const Transaction = () => {
       accountId: "",
       status: "COMPLETED",
     });
+
+  // Add this state for search
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Add new state
+  const [availableBudgets, setAvailableBudgets] = useState<BudgetOption[]>([]);
+  const [selectedBudget, setSelectedBudget] = useState<string>("");
 
   const handleFile = (file: File) => {
     console.log("Handling file:", file);
@@ -223,6 +247,21 @@ const Transaction = () => {
     }
   };
 
+  // Add function to fetch available budgets
+  const fetchAvailableBudgets = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`${BACKEND_URL}/budget/active`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch budgets");
+      const data = await response.json();
+      setAvailableBudgets(data);
+    } catch (error) {
+      console.error("Error fetching budgets:", error);
+    }
+  };
+
   const handleImportClick = () => {
     setIsModalOpen(true);
     fetchAccounts();
@@ -231,6 +270,7 @@ const Transaction = () => {
   useEffect(() => {
     fetchTransactions();
     fetchAccounts();
+    fetchAvailableBudgets();
   }, [router]);
 
   const processCSV = async () => {
@@ -318,17 +358,19 @@ const Transaction = () => {
       // Format the transaction data
       const transactionData = {
         ...newTransaction,
-        date: new Date(newTransaction.date).toISOString(), // Convert date to ISO string
-        amount: Math.abs(newTransaction.amount), // Ensure positive amount
+        date: new Date(newTransaction.date).toISOString(),
+        amount: Math.abs(newTransaction.amount),
+        categoryId: selectedBudget
+          ? availableBudgets.find((b) => b.id === selectedBudget)?.categoryId
+          : null,
       };
 
-      console.log("Sending transaction:", transactionData); // Debug log
+      console.log("Sending transaction:", transactionData);
 
-      const token = localStorage.getItem("access_token");
       const response = await fetch(`${BACKEND_URL}/bank/transactions`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(transactionData),
@@ -340,6 +382,7 @@ const Transaction = () => {
       }
 
       await fetchTransactions();
+      await fetchAvailableBudgets(); // Refresh budgets after transaction
       setNormalTransactionDialog(false);
       // Reset form
       setNewTransaction({
@@ -351,6 +394,7 @@ const Transaction = () => {
         accountId: "",
         status: "COMPLETED",
       });
+      setSelectedBudget("");
       alert("Transaction created successfully");
     } catch (error) {
       console.error("Error creating transaction:", error);
@@ -359,6 +403,11 @@ const Transaction = () => {
       );
     }
   };
+
+  // Add this function to filter transactions
+  const filteredTransactions = transactions.filter((tx) =>
+    tx.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -441,6 +490,8 @@ const Transaction = () => {
                 <Input
                   placeholder="Search transactions..."
                   className="bg-white/5 border-white/10 text-white pl-10"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </CardHeader>
@@ -457,7 +508,7 @@ const Transaction = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((tx) => (
+                  {filteredTransactions.map((tx) => (
                     <TableRow key={tx.id} className="border-white/10">
                       <TableCell className="text-white/70">
                         {formatDate(tx.date)}
@@ -693,6 +744,33 @@ const Transaction = () => {
                 <option value="EXPENSE">Expense</option>
                 <option value="INCOME">Income</option>
               </select>
+              {newTransaction.type === "EXPENSE" && (
+                <Select
+                  value={selectedBudget}
+                  onValueChange={setSelectedBudget}
+                >
+                  <SelectTrigger className="w-full bg-white/5 border-white/10 text-white">
+                    <SelectValue placeholder="Select Budget (Optional)" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-white/10 text-white">
+                    <SelectItem
+                      value="none"
+                      className="text-white hover:bg-white/10"
+                    >
+                      No Budget
+                    </SelectItem>
+                    {availableBudgets.map((budget) => (
+                      <SelectItem
+                        key={budget.id}
+                        value={budget.id}
+                        className="text-white hover:bg-white/10"
+                      >
+                        {budget.category.name} (${budget.remaining} remaining)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <select
                 value={newTransaction.accountId}
                 onChange={(e) =>

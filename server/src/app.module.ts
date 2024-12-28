@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
 import { BankModule } from './bank/bank.module';
+import { BudgetModule } from './budget/budget.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -25,6 +26,7 @@ import * as Joi from 'joi';
     }),
     AuthModule,
     BankModule,
+    BudgetModule,
   ],
   controllers: [AppController],
   providers: [AppService],
