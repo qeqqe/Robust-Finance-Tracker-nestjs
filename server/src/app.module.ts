@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
 import { BankModule } from './bank/bank.module';
 import { BudgetModule } from './budget/budget.module';
+import { AiModule } from './ai/ai.module';
 import * as Joi from 'joi';
 
 @Module({
@@ -27,6 +28,7 @@ import * as Joi from 'joi';
     AuthModule,
     BankModule,
     BudgetModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
