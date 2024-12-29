@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,6 +28,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
+import { toast } from "react-hot-toast";
+import { useFinance } from "@/contexts/FinanceContext";
+import { formatCurrency, getBudgetStatus } from "@/lib/utils";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -35,6 +40,8 @@ interface BudgetInterface {
   amount: number;
   period: string;
   spent: number;
+  startDate: string;
+  endDate?: string | null;
   category: {
     name: string;
   };
@@ -46,11 +53,66 @@ interface CategoryInterface {
   type: string;
 }
 
+interface TransactionType {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  type: "EXPENSE" | "INCOME" | "TRANSFER";
+  categoryId: string;
+}
+
+const calculateBudgetMetrics = (spent: number, allocated: number) => {
+  const remaining = allocated - spent;
+  const percentage = allocated > 0 ? (spent / allocated) * 100 : 0;
+  const isOverBudget = spent > allocated;
+
+  return {
+    remaining,
+    percentage: Math.min(Math.max(percentage, 0), 100),
+    isOverBudget,
+    status: isOverBudget ? "over" : percentage >= 80 ? "warning" : "good",
+  };
+};
+
+const validateBudget = (budget: any) => {
+  const errors = [];
+
+  if (!budget.categoryId) {
+    errors.push("Category is required");
+  }
+
+  if (!budget.amount || budget.amount <= 0) {
+    errors.push("Budget amount must be greater than 0");
+  }
+
+  if (!budget.startDate) {
+    errors.push("Start date is required");
+  }
+
+  if (
+    budget.alertThreshold &&
+    (budget.alertThreshold < 0 || budget.alertThreshold > 100)
+  ) {
+    errors.push("Alert threshold must be between 0 and 100");
+  }
+
+  return errors;
+};
+
 const Budget = () => {
+  const {
+    refreshData,
+    isLoading: contextLoading,
+    transactions,
+    activeBudgets,
+  } = useFinance();
+
   const [budgets, setBudgets] = useState<BudgetInterface[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [categories, setCategories] = useState<CategoryInterface[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState("MONTHLY");
+  const [categories, setCategories] = useState<CategoryInterface[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [newBudget, setNewBudget] = useState({
     categoryId: "",
     amount: 0,
@@ -61,56 +123,70 @@ const Budget = () => {
   });
   const [totalSpent, setTotalSpent] = useState(0);
   const [totalBudget, setTotalBudget] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
 
-  const fetchBudgetProgress = async (budgetId: string) => {
-    try {
-      const token = localStorage.getItem("access_token");
-      const response = await fetch(
-        `${BACKEND_URL}/budget/progress/${budgetId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+  const calculateBudgetProgress = (budget: BudgetInterface) => {
+    const budgetStart = new Date(budget.startDate);
+    const budgetEnd = budget.endDate ? new Date(budget.endDate) : new Date();
 
-      if (!response.ok) throw new Error("Failed to fetch budget progress");
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching budget progress:", error);
-      return null;
-    }
+    const relevantTransactions = transactions.filter(
+      (tx: TransactionType) =>
+        tx.categoryId === budget.categoryId &&
+        tx.type === "EXPENSE" &&
+        new Date(tx.date) >= budgetStart &&
+        new Date(tx.date) <= budgetEnd
+    );
+
+    const spent = relevantTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+    return {
+      spent,
+      remaining: budget.amount - spent,
+      percentage: (spent / budget.amount) * 100,
+      isOverBudget: spent > budget.amount,
+      transactions: relevantTransactions,
+    };
   };
 
   const fetchBudgets = async () => {
     try {
       const token = localStorage.getItem("access_token");
-      if (!token) return;
+      if (!token) {
+        toast.error("Please login to view budgets");
+        router.push("/login");
+        return;
+      }
 
       const response = await fetch(`${BACKEND_URL}/budget`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!response.ok) throw new Error("Failed to fetch budgets");
+      if (!response.ok) {
+        throw new Error("Failed to fetch budgets");
+      }
 
       const data = await response.json();
 
-      // Fetch progress for each budget
-      const budgetsWithProgress = await Promise.all(
-        data.map(async (budget: any) => {
-          const progress = await fetchBudgetProgress(budget.id);
-          return {
-            ...budget,
-            spent: progress?.spent || 0,
-          };
-        })
-      );
+      const budgetsWithProgress = data.map((budget: BudgetInterface) => {
+        const progress = calculateBudgetProgress(budget);
+        return {
+          ...budget,
+          spent: progress.spent,
+          remaining: progress.remaining,
+          percentage: progress.percentage,
+          isOverBudget: progress.isOverBudget,
+        };
+      });
 
       setBudgets(budgetsWithProgress);
+      calculateTotals(budgetsWithProgress);
     } catch (error) {
-      console.error("Error fetching budgets:", error);
-      setBudgets([]);
+      const message =
+        error instanceof Error ? error.message : "Failed to load budgets";
+      setError(message);
+      toast.error(message);
     }
   };
 
@@ -152,44 +228,31 @@ const Budget = () => {
     setTotalBudget(total);
   };
 
-  const calculatePercentage = (spent: number, total: number) => {
-    if (total <= 0) return 0;
-    return (spent / total) * 100;
-  };
-
-  const getBudgetStatus = (spent: number, allocated: number) => {
-    const percentage = calculatePercentage(spent, allocated);
-    if (percentage >= 90) return "bg-red-500";
-    if (percentage >= 75) return "bg-yellow-500";
-    return "bg-green-500";
-  };
-
-  const validateBudgetAmount = (amount: number) => {
-    return amount > 0;
-  };
-
   const createBudget = async () => {
     try {
-      if (
-        !newBudget.categoryId ||
-        !validateBudgetAmount(newBudget.amount) ||
-        !newBudget.startDate
-      ) {
-        alert(
-          "Please fill in all required fields. Budget amount must be positive."
-        );
+      const validationErrors = validateBudget(newBudget);
+      if (validationErrors.length > 0) {
+        toast.error(validationErrors.join("\n"), {
+          duration: 4000,
+          style: { background: "#dc2626", color: "white" },
+        });
         return;
       }
 
-      // Format the data before sending
-      const budgetData = {
-        ...newBudget,
-        amount: Number(newBudget.amount),
-        startDate: new Date(newBudget.startDate), // This will be serialized correctly
-        period: newBudget.period,
-      };
+      const existingBudget = budgets.find(
+        (b) =>
+          b.categoryId === newBudget.categoryId &&
+          b.period === newBudget.period &&
+          new Date(b.startDate) <= new Date(newBudget.startDate) &&
+          (!b.endDate || new Date(b.endDate) >= new Date(newBudget.startDate))
+      );
 
-      console.log("Sending budget data:", budgetData); // Debug log
+      if (existingBudget) {
+        toast.error(
+          "A budget already exists for this category in the specified period"
+        );
+        return;
+      }
 
       const response = await fetch(`${BACKEND_URL}/budget`, {
         method: "POST",
@@ -197,44 +260,66 @@ const Budget = () => {
           Authorization: `Bearer ${localStorage.getItem("access_token")}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(budgetData),
+        body: JSON.stringify({
+          ...newBudget,
+          amount: Math.abs(Number(newBudget.amount)),
+          startDate: new Date(newBudget.startDate).toISOString(),
+          alertThreshold: Math.min(
+            Math.max(newBudget.alertThreshold || 80, 0),
+            100
+          ),
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to create budget");
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create budget");
       }
-
-      const data = await response.json();
-      console.log("Created budget:", data);
 
       await fetchBudgets();
       setIsCreateModalOpen(false);
-      setNewBudget({
-        categoryId: "",
-        amount: 0,
-        period: "MONTHLY",
-        startDate: new Date().toISOString().split("T")[0],
-        alerts: true,
-        alertThreshold: 80,
-      });
+      toast.success("Budget created successfully");
+      resetNewBudgetForm();
     } catch (error) {
-      console.error("Error creating budget:", error);
-      alert(error instanceof Error ? error.message : "Failed to create budget");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create budget"
+      );
     }
+  };
+
+  const resetNewBudgetForm = () => {
+    setNewBudget({
+      categoryId: "",
+      amount: 0,
+      period: "MONTHLY",
+      startDate: new Date().toISOString().split("T")[0],
+      alerts: true,
+      alertThreshold: 80,
+    });
   };
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        await fetchBudgets();
-        await fetchCategories();
+        setIsLoading(true);
+        await Promise.all([fetchBudgets(), fetchCategories()]);
+      } catch (error) {
+        console.error("Error loading data:", error);
+        toast.error("Failed to load budgets");
       } finally {
         setIsLoading(false);
       }
     };
+
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!contextLoading) {
+      fetchBudgets();
+      fetchCategories();
+    }
+  }, [contextLoading]);
 
   useEffect(() => {
     if (budgets.length > 0) {
@@ -248,7 +333,9 @@ const Budget = () => {
     }
   }, [isCreateModalOpen]);
 
-  if (isLoading) return <div className="text-white">Loading budgets...</div>;
+  if (isLoading || contextLoading) {
+    return <div className="text-white">Loading budgets...</div>;
+  }
 
   const summaryCards = [
     {
@@ -276,6 +363,93 @@ const Budget = () => {
       trend: `${(100 - (totalSpent / totalBudget) * 100).toFixed(1)}%`,
     },
   ];
+
+  const renderBudgetCard = (budget: BudgetInterface) => {
+    const progress = calculateBudgetProgress(budget);
+    const status = getBudgetStatus(progress.spent, budget.amount);
+    const recentTransactions = progress.transactions.slice(0, 3);
+
+    return (
+      <div key={budget.id} className="space-y-4 p-4 rounded-lg bg-white/5">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-white font-medium flex items-center gap-2">
+              {budget.category.name}
+              {status.isOverBudget && (
+                <span className="text-red-400 text-sm px-2 py-1 rounded-full bg-red-400/10">
+                  OVER BUDGET
+                </span>
+              )}
+            </h3>
+            <p className="text-sm text-white/50">{budget.period}</p>
+          </div>
+          <div className="text-right">
+            <p
+              className={status.isOverBudget ? "text-red-400" : "text-white/70"}
+            >
+              {formatCurrency(budget.spent)} / {formatCurrency(budget.amount)}
+            </p>
+            <p className="text-sm text-white/50">
+              {status.isOverBudget
+                ? `${formatCurrency(Math.abs(status.remaining))} over budget`
+                : `${formatCurrency(status.remaining)} remaining`}
+            </p>
+          </div>
+        </div>
+
+        <Progress value={status.percentage} className={`h-2 ${status.color}`} />
+
+        {recentTransactions.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-white/50">Recent Transactions</p>
+              <p className="text-xs text-white/30">
+                Last {recentTransactions.length} transactions
+              </p>
+            </div>
+            <div className="space-y-2 rounded-lg bg-white/5 p-3">
+              {recentTransactions.map((tx: TransactionType) => (
+                <div
+                  key={tx.id}
+                  className="flex flex-col gap-1 border-b border-white/5 pb-2 last:border-0 last:pb-0"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex flex-col">
+                      <span className="text-white/90 font-medium">
+                        {tx.description}
+                      </span>
+                      <span className="text-xs text-white/40">
+                        {new Date(tx.date).toLocaleDateString("en-US", {
+                          weekday: "short",
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-red-400 font-medium">
+                        {formatCurrency(tx.amount)}
+                      </span>
+                      <span className="text-xs text-white/40">
+                        {((tx.amount / budget.amount) * 100).toFixed(1)}% of
+                        budget
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {progress.transactions.length > 3 && (
+              <p className="text-xs text-white/30 text-right">
+                +{progress.transactions.length - 3} more transactions
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -313,36 +487,7 @@ const Budget = () => {
               No budgets found. Create your first budget to get started!
             </div>
           ) : (
-            budgets.map((budget: BudgetInterface) => (
-              <div key={budget.id} className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-white font-medium">
-                      {budget.category.name}
-                    </h3>
-                    <p className="text-sm text-white/50">{budget.period}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white">
-                      ${budget.spent} / ${budget.amount}
-                    </p>
-                    <p className="text-sm text-white/50">
-                      {calculatePercentage(budget.spent, budget.amount).toFixed(
-                        1
-                      )}
-                      %
-                    </p>
-                  </div>
-                </div>
-                <Progress
-                  value={calculatePercentage(budget.spent, budget.amount)}
-                  className={`h-2 ${getBudgetStatus(
-                    budget.spent,
-                    budget.amount
-                  )}`}
-                />
-              </div>
-            ))
+            budgets.map(renderBudgetCard)
           )}
         </CardContent>
       </Card>

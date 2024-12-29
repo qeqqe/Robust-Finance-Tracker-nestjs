@@ -27,32 +27,20 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"; // Change this import line
+} from "@/components/ui/select";
+import { toast } from "react-hot-toast";
+import { fetchWithAuth } from "@/lib/api";
+import { useFinance } from "@/contexts/FinanceContext";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-interface TransactionInterface {
+type TransactionInterface = {
   id: string;
-  userId: string;
-  accountId: string;
-  categoryId: string | null;
   amount: number;
   type: "INCOME" | "EXPENSE" | "TRANSFER";
-  status: "PENDING" | "COMPLETED" | "FAILED" | "CANCELLED";
   date: string;
   description: string;
-  notes: string | null;
-  receipt: {
-    id: string;
-    url: string;
-  } | null;
-  isRecurring: boolean;
-  recurringRule: {
-    frequency: string;
-    interval: number;
-    nextDue: string;
-  } | null;
-  category: {
+  category?: {
     id: string;
     name: string;
     color: string | null;
@@ -63,8 +51,23 @@ interface TransactionInterface {
     name: string;
     type: string;
   };
-  createdAt: string;
-}
+  userId?: string;
+  accountId?: string;
+  categoryId?: string | null;
+  status?: "PENDING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  notes?: string | null;
+  receipt?: {
+    id: string;
+    url: string;
+  } | null;
+  isRecurring?: boolean;
+  recurringRule?: {
+    frequency: string;
+    interval: number;
+    nextDue: string;
+  } | null;
+  createdAt?: string;
+};
 
 interface NormalTransactionInterface {
   description: string;
@@ -86,7 +89,41 @@ interface BudgetOption {
   };
 }
 
+const validateTransaction = (transaction: NormalTransactionInterface) => {
+  const errors = [];
+
+  if (!transaction.description?.trim()) {
+    errors.push("Description is required");
+  }
+
+  if (!transaction.amount || transaction.amount <= 0) {
+    errors.push("Amount must be greater than 0");
+  }
+
+  if (!transaction.date) {
+    errors.push("Date is required");
+  } else {
+    const transactionDate = new Date(transaction.date);
+    if (transactionDate > new Date()) {
+      errors.push("Transaction date cannot be in the future");
+    }
+  }
+
+  if (!transaction.accountId) {
+    errors.push("Account is required");
+  }
+
+  return errors;
+};
+
 const Transaction = () => {
+  const {
+    refreshData,
+    transactions: contextTransactions,
+    activeBudgets: contextActiveBudgets,
+    accounts: contextAccounts,
+  } = useFinance();
+
   const [transactions, setTransactions] = useState<TransactionInterface[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [transactionData, setTransactionData] =
@@ -116,17 +153,15 @@ const Transaction = () => {
     useState<NormalTransactionInterface>({
       description: "",
       amount: 0,
-      date: new Date().toISOString().split("T")[0], // Today's date as default
+      date: new Date().toISOString().split("T")[0],
       type: "EXPENSE",
       notes: "",
       accountId: "",
       status: "COMPLETED",
     });
 
-  // Add this state for search
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Add new state
   const [availableBudgets, setAvailableBudgets] = useState<BudgetOption[]>([]);
   const [selectedBudget, setSelectedBudget] = useState<string>("");
 
@@ -218,36 +253,20 @@ const Transaction = () => {
 
   const fetchAccounts = async () => {
     try {
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        router.push("/login");
-        return;
-      }
-
-      const response = await fetch(`${BACKEND_URL}/bank/overview`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error("Failed to fetch accounts");
-
+      const response = await fetchWithAuth(`${BACKEND_URL}/bank/overview`);
       const data = await response.json();
-      console.log("Fetched accounts:", data.accounts.list); // Add this for debugging
       setAccounts(data.accounts.list);
-
-      // Set default account if exists
       if (data.accounts.list.length > 0) {
         setSelectedAccountId(data.accounts.list[0].id);
-      } else {
-        console.log("No accounts found"); // Add this for debugging
       }
     } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to fetch accounts"
+      );
       console.error("Error fetching accounts:", error);
     }
   };
 
-  // Add function to fetch available budgets
   const fetchAvailableBudgets = async () => {
     try {
       const token = localStorage.getItem("access_token");
@@ -273,13 +292,65 @@ const Transaction = () => {
     fetchAvailableBudgets();
   }, [router]);
 
-  const processCSV = async () => {
-    if (!file || !selectedAccountId) {
-      alert("Please select an account and upload a CSV file");
-      return;
-    }
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        setIsLoading(true);
+        await Promise.all([
+          fetchTransactions(),
+          fetchAccounts(),
+          fetchAvailableBudgets(),
+        ]);
+      } catch (error) {
+        console.error("Error initializing data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
+    initializeData();
+  }, []);
+
+  // Add effect to sync with context
+  useEffect(() => {
+    if (accounts.length > 0) {
+      setAccounts(accounts);
+      if (!selectedAccountId && accounts[0]) {
+        setSelectedAccountId(accounts[0].id);
+      }
+    }
+  }, [accounts]);
+
+  useEffect(() => {
+    if (contextActiveBudgets?.length > 0) {
+      setAvailableBudgets(contextActiveBudgets);
+    }
+  }, [contextActiveBudgets]);
+
+  useEffect(() => {
+    if (contextTransactions?.length > 0) {
+      setTransactions(
+        contextTransactions.map((tx) => ({
+          ...tx,
+          account: tx.account || { id: "", name: "", type: "" },
+          status: tx.status || "COMPLETED",
+        })) as TransactionInterface[]
+      );
+    }
+  }, [contextTransactions]);
+
+  const processCSV = async () => {
     try {
+      if (!file) {
+        toast.error("Please upload a CSV file");
+        return;
+      }
+
+      if (!selectedAccountId) {
+        toast.error("Please select an account");
+        return;
+      }
+
       const results = await new Promise((resolve, reject) => {
         Papa.parse(file, {
           header: true,
@@ -289,29 +360,47 @@ const Transaction = () => {
         });
       });
 
-      // Basic validation
       if (!Array.isArray(results) || results.length === 0) {
         throw new Error("No valid data found in CSV");
       }
 
-      const formattedTransactions = (results as any[]).map((row) => ({
-        description: row.description || row.Description || row.DESC || "",
-        amount: Math.abs(
-          parseFloat(row.amount || row.Amount || row.AMOUNT || "0")
-        ),
-        date: new Date(row.date || row.Date || row.DATE).toISOString(),
-        type:
-          parseFloat(row.amount || row.Amount || row.AMOUNT) < 0
-            ? "EXPENSE"
-            : "INCOME",
-        status: "COMPLETED",
-        accountId: selectedAccountId,
-        notes: row.notes || row.Notes || row.NOTES || "",
-      }));
+      const requiredColumns = ["description", "amount", "date"];
+      const firstRow = results[0] as any;
+      const missingColumns = requiredColumns.filter(
+        (col) =>
+          !Object.keys(firstRow).some((header) =>
+            header.toLowerCase().includes(col.toLowerCase())
+          )
+      );
 
-      console.log("Sending to backend:", {
-        transactions: formattedTransactions,
-        accountId: selectedAccountId,
+      if (missingColumns.length > 0) {
+        throw new Error(
+          `Missing required columns: ${missingColumns.join(", ")}`
+        );
+      }
+
+      const formattedTransactions = (results as any[]).map((row, index) => {
+        const amount = parseFloat(
+          row.amount || row.Amount || row.AMOUNT || "0"
+        );
+        if (isNaN(amount)) {
+          throw new Error(`Invalid amount in row ${index + 1}`);
+        }
+
+        const date = new Date(row.date || row.Date || row.DATE);
+        if (isNaN(date.getTime())) {
+          throw new Error(`Invalid date in row ${index + 1}`);
+        }
+
+        return {
+          description: row.description || row.Description || row.DESC || "",
+          amount: Math.abs(amount),
+          date: date.toISOString(),
+          type: amount < 0 ? "EXPENSE" : "INCOME",
+          status: "COMPLETED",
+          accountId: selectedAccountId,
+          notes: row.notes || row.Notes || row.NOTES || "",
+        };
       });
 
       const response = await fetch(`${BACKEND_URL}/bank/transactions/import`, {
@@ -335,37 +424,54 @@ const Transaction = () => {
       setIsModalOpen(false);
       setFile(null);
       setPreview([]);
-      alert("Transactions imported successfully");
+
+      toast.success(
+        `Successfully imported ${formattedTransactions.length} transactions`,
+        {
+          style: {
+            background: "#059669",
+            color: "white",
+          },
+        }
+      );
     } catch (error) {
       console.error("Error processing CSV:", error);
-      alert(
-        error instanceof Error ? error.message : "Failed to process CSV file"
+      toast.error(
+        error instanceof Error ? error.message : "Failed to process CSV file",
+        {
+          duration: 5000,
+          style: {
+            background: "#dc2626",
+            color: "white",
+          },
+        }
       );
     }
   };
 
   const handleNormalTransaction = async () => {
-    if (
-      !newTransaction.accountId ||
-      !newTransaction.description ||
-      !newTransaction.amount
-    ) {
-      alert("Please fill in all required fields");
-      return;
-    }
-
     try {
-      // Format the transaction data
+      const validationErrors = validateTransaction(newTransaction);
+      if (validationErrors.length > 0) {
+        toast.error(validationErrors.join("\n"), {
+          duration: 4000,
+          style: {
+            background: "#dc2626",
+            color: "white",
+          },
+        });
+        return;
+      }
+
       const transactionData = {
         ...newTransaction,
         date: new Date(newTransaction.date).toISOString(),
         amount: Math.abs(newTransaction.amount),
-        categoryId: selectedBudget
-          ? availableBudgets.find((b) => b.id === selectedBudget)?.categoryId
-          : null,
+        categoryId:
+          selectedBudget && selectedBudget !== "none"
+            ? availableBudgets.find((b) => b.id === selectedBudget)?.categoryId
+            : null,
       };
-
-      console.log("Sending transaction:", transactionData);
 
       const response = await fetch(`${BACKEND_URL}/bank/transactions`, {
         method: "POST",
@@ -376,15 +482,16 @@ const Transaction = () => {
         body: JSON.stringify(transactionData),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create transaction");
+        throw new Error(data.message || "Failed to create transaction");
       }
 
       await fetchTransactions();
-      await fetchAvailableBudgets(); // Refresh budgets after transaction
+      await fetchAvailableBudgets();
       setNormalTransactionDialog(false);
-      // Reset form
+
       setNewTransaction({
         description: "",
         amount: 0,
@@ -395,16 +502,27 @@ const Transaction = () => {
         status: "COMPLETED",
       });
       setSelectedBudget("");
-      alert("Transaction created successfully");
+
+      toast.success("Transaction created successfully", {
+        style: {
+          background: "#059669",
+          color: "white",
+        },
+      });
     } catch (error) {
       console.error("Error creating transaction:", error);
-      alert(
-        error instanceof Error ? error.message : "Failed to create transaction"
+      toast.error(
+        error instanceof Error ? error.message : "An unexpected error occurred",
+        {
+          style: {
+            background: "#dc2626",
+            color: "white",
+          },
+        }
       );
     }
   };
 
-  // Add this function to filter transactions
   const filteredTransactions = transactions.filter((tx) =>
     tx.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -417,6 +535,24 @@ const Transaction = () => {
       day: "numeric",
     });
   };
+
+  useEffect(() => {
+    const handleFetchError = (error: any) => {
+      if (error.status === 401) {
+        toast.error("Session expired. Please login again.", {
+          style: {
+            background: "#dc2626",
+            color: "white",
+          },
+        });
+        router.push("/login");
+      }
+    };
+
+    window.addEventListener("unhandledrejection", handleFetchError);
+    return () =>
+      window.removeEventListener("unhandledrejection", handleFetchError);
+  }, [router]);
 
   if (isLoading)
     return <div className="text-white">Loading transactions...</div>;
@@ -464,7 +600,7 @@ const Transaction = () => {
                   <Button
                     variant="outline"
                     className="bg-white/5 border-white/10 text-white gap-2"
-                    onClick={handleImportClick} // Change this line
+                    onClick={handleImportClick}
                   >
                     <Upload className="h-4 w-4" />
                     Import
@@ -581,7 +717,6 @@ const Transaction = () => {
                 )}
               </div>
 
-              {/* CSV format example */}
               {preview.length == 0 && (
                 <div className="rounded-lg bg-white/5 p-4 text-sm">
                   <h4 className="font-medium text-white mb-2">
@@ -620,7 +755,6 @@ const Transaction = () => {
                 </div>
               )}
 
-              {/* preview mapping */}
               {preview.length > 0 && (
                 <div className="space-y-4">
                   <h3 className="text-lg text-white">Preview:</h3>
@@ -682,7 +816,6 @@ const Transaction = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog for normal transaction */}
       <Dialog
         open={normalTransactionDialog}
         onOpenChange={setNormalTransactionDialog}
@@ -757,18 +890,20 @@ const Transaction = () => {
                       value="none"
                       className="text-white hover:bg-white/10"
                     >
-                      No Budget
-                    </SelectItem>
+                      {" "}
+                      No Budget{" "}
+                    </SelectItem>{" "}
                     {availableBudgets.map((budget) => (
                       <SelectItem
                         key={budget.id}
                         value={budget.id}
                         className="text-white hover:bg-white/10"
                       >
-                        {budget.category.name} (${budget.remaining} remaining)
+                        {" "}
+                        {budget.category.name} (${budget.remaining} remaining){" "}
                       </SelectItem>
-                    ))}
-                  </SelectContent>
+                    ))}{" "}
+                  </SelectContent>{" "}
                 </Select>
               )}
               <select

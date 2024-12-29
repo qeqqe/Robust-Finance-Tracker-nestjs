@@ -22,7 +22,19 @@ export class BudgetService {
 
   async createBudget(userId: string, dto: CreateBudgetDto) {
     try {
-      // Validate category ownership
+      if (dto.amount <= 0) {
+        throw new BadRequestException('Budget amount must be greater than 0');
+      }
+
+      if (
+        dto.alertThreshold &&
+        (dto.alertThreshold < 0 || dto.alertThreshold > 100)
+      ) {
+        throw new BadRequestException(
+          'Alert threshold must be between 0 and 100',
+        );
+      }
+
       const category = await prisma.category.findFirst({
         where: {
           id: dto.categoryId,
@@ -34,7 +46,22 @@ export class BudgetService {
         throw new ForbiddenException('Category not found or access denied');
       }
 
-      // Create budget with proper date handling
+      const existingBudget = await prisma.budget.findFirst({
+        where: {
+          userId,
+          categoryId: dto.categoryId,
+          period: dto.period,
+          startDate: { lte: dto.startDate },
+          OR: [{ endDate: null }, { endDate: { gte: dto.startDate } }],
+        },
+      });
+
+      if (existingBudget) {
+        throw new BadRequestException(
+          'A budget already exists for this category in the specified period',
+        );
+      }
+
       return await prisma.budget.create({
         data: {
           userId,
@@ -64,11 +91,11 @@ export class BudgetService {
 
     if (!budget) throw new NotFoundException('Budget not found');
 
-    // Get transactions within the budget period
     const transactions = await prisma.transaction.findMany({
       where: {
         userId,
         categoryId: budget.categoryId,
+        type: 'EXPENSE',
         date: {
           gte: budget.startDate,
           lte: budget.endDate || new Date(),
@@ -76,15 +103,17 @@ export class BudgetService {
       },
     });
 
-    const spent = transactions.reduce((sum, tx) => sum + tx.amount, 0);
-    const remaining = budget.amount - spent;
+    const spent = Math.abs(
+      transactions.reduce((sum, tx) => sum + tx.amount, 0),
+    );
+    const remaining = Math.max(budget.amount - spent, 0);
     const percentage = (spent / budget.amount) * 100;
 
     return {
       budget,
       spent,
       remaining,
-      percentage,
+      percentage: Math.min(percentage, 100),
       isOverBudget: spent > budget.amount,
       transactions,
     };
@@ -92,7 +121,6 @@ export class BudgetService {
 
   async getActiveBudgets(userId: string) {
     try {
-      // Get active budgets within current period
       const budgets = await prisma.budget.findMany({
         where: {
           userId,
@@ -104,7 +132,6 @@ export class BudgetService {
         },
       });
 
-      // Calculate remaining amounts for each budget
       const budgetsWithProgress = await Promise.all(
         budgets.map(async (budget) => {
           const progress = await this.getBudgetProgress(userId, budget.id);
