@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Layout,
@@ -24,10 +24,18 @@ import Account from "../(components)/Account";
 import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
-  if (!localStorage.getItem("activeSection")) {
-    localStorage.setItem("activeSection", "overview");
-  }
-  const activeSection = localStorage.getItem("activeSection") || "overview";
+  useEffect(() => {
+    const storedSection = localStorage.getItem("activeSection");
+    if (!storedSection) {
+      localStorage.setItem("activeSection", "overview");
+    } else {
+      setActiveSection(storedSection);
+    }
+  }, []);
+
+  const [activeSection, setActiveSection] = useState(
+    localStorage.getItem("activeSection") || "overview"
+  );
   const [isExpanded, setIsExpanded] = useState(false);
   const router = useRouter();
   if (!localStorage.getItem("access_token")) {
@@ -61,9 +69,9 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="h-screen bg-black overflow-hidden">
       {/* bg effect */}
-      <div className="fixed inset-0">
+      <div className="fixed inset-0 z-0">
         <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:50px_50px]" />
         <div className="absolute inset-0 bg-gradient-to-tr from-slate-900 via-purple-900/20 to-slate-900" />
         <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-purple-500/30 rounded-full mix-blend-color-dodge filter blur-[120px] animate-blob"></div>
@@ -125,7 +133,10 @@ export default function DashboardPage() {
                     ? "text-white bg-white/10"
                     : "text-white/70 hover:text-white hover:bg-white/10"
                 }`}
-                onClick={() => localStorage.setItem("activeSection", item.id)}
+                onClick={() => {
+                  localStorage.setItem("activeSection", item.id);
+                  setActiveSection(item.id);
+                }}
               >
                 <item.icon className="h-6 w-6" />
                 <span className="transition-opacity duration-200">
@@ -141,12 +152,14 @@ export default function DashboardPage() {
       <div
         className={`transition-all duration-300 ${
           isExpanded ? "ml-80" : "ml-0"
-        } p-8 pt-20 relative`}
+        } h-screen overflow-y-auto pt-20 px-8 relative`}
       >
         {/* title */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">
-            {activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
+            {activeSection == "ai"
+              ? ""
+              : activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
           </h1>
         </div>
 
