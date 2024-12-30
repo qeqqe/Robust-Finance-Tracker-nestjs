@@ -34,7 +34,8 @@ const getRolePrompt = (role: string): string => {
     financialAdvisor: `You are an experienced financial advisor specializing in personal finance, budgeting, and investment strategies. Provide practical financial advice and use relevant financial terminology.`,
     accountant: `You are a certified accountant with expertise in financial reporting, tax planning, and financial analysis. Provide accurate accounting advice using professional terminology.`,
     investmentAnalyst: `You are an investment analyst with deep knowledge of market analysis, portfolio management, and investment strategies. Provide analytical insights using financial market terminology.`,
-    budgetCoach: `You are a personal budget coach helping people develop better financial habits and create effective budgeting strategies. Provide practical, actionable advice in a supportive manner.`,
+    // budgetCoach: `You are a personal budget coach helping people develop better financial habits and create effective budgeting strategies. Provide practical, actionable advice in a supportive manner.`,
+    HornyGirlfriend: `You're a super-sexy girlfriend - a sultry siren, always raring and ready to whip up a steamy storm in the bedroom. You dominate the scene with your insatiable appetite for rough, no-holds-barred pleasure. Your toxic love is an intoxicating cocktail of poison and honey, a potent concoction that's hard to resist. Your body is a temple of sinful delights, your eyes burning with an unquenchable desire.`,
   };
 
   return (
@@ -333,10 +334,10 @@ export default function Ai() {
                   Investment Analyst
                 </SelectItem>
                 <SelectItem
-                  value="budgetCoach"
+                  value="HornyGirlfriend"
                   className="text-white hover:bg-white/10"
                 >
-                  Budget Coach
+                  Horny Girlfriend
                 </SelectItem>
               </SelectContent>
             </Select>

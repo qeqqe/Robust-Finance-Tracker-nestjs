@@ -16,10 +16,7 @@ import Overview from "../(components)/Overview";
 import Transaction from "../(components)/Transaction";
 import Budget from "../(components)/Budget";
 import Ai from "../(components)/Ai";
-import Reports from "../(components)/Reports";
 import Setting from "../(components)/Setting";
-import Investment from "../(components)/Investment";
-import CurrencyPage from "../(components)/CurrencyPage";
 import Account from "../(components)/Account";
 import { useRouter } from "next/navigation";
 
@@ -52,15 +49,8 @@ export default function DashboardPage() {
 
       case "budgets":
         return <Budget />;
-
-      case "investments":
-        return <Investment />;
       case "ai":
         return <Ai />;
-      case "currency":
-        return <CurrencyPage />;
-      case "reports":
-        return <Reports />;
       case "settings":
         return <Setting />;
       case "accounts":
@@ -118,12 +108,12 @@ export default function DashboardPage() {
               { icon: Layout, label: "Overview", id: "overview" },
               { icon: ArrowUpDown, label: "Transactions", id: "transactions" },
               { icon: PieChart, label: "Budgets", id: "budgets" },
-              { icon: TrendingUp, label: "Investments", id: "investments" },
+              // { icon: TrendingUp, label: "Investments", id: "investments" },
               { icon: Brain, label: "AI Insights", id: "ai" },
-              { icon: Globe, label: "Multi-Currency", id: "currency" },
-              { icon: FileSpreadsheet, label: "Reports", id: "reports" },
-              { icon: Settings, label: "Settings", id: "settings" },
+              // { icon: Globe, label: "Multi-Currency", id: "currency" },
+              // { icon: FileSpreadsheet, label: "Reports", id: "reports" },
               { icon: Wallet, label: "Accounts", id: "accounts" },
+              { icon: Settings, label: "Settings", id: "settings" },
             ].map((item) => (
               <Button
                 key={item.id}
